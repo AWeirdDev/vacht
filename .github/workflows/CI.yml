@@ -27,8 +27,6 @@ jobs:
           - runner: ubuntu-22.04
             target: x86_64
           - runner: ubuntu-22.04
-            target: x86
-          - runner: ubuntu-22.04
             target: aarch64
           # these targets are not yet supported:
           # - runner: ubuntu-22.04
@@ -37,6 +35,8 @@ jobs:
           #   target: s390x
           # - runner: ubuntu-22.04
           #   target: ppc64le
+          # - runner: ubuntu-22.04
+          #   target: x86
     steps:
       - uses: actions/checkout@v6
       - name: Build wheels
