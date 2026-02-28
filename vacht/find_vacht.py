@@ -1,3 +1,10 @@
+# This file is copied and modified from the uv project.
+# Repository: https://github.com/astral-sh/uv
+# Directory: /python/uv/_find_uv.py
+#
+# License: MIT
+# Copyright (c) 2025 Astral Software Inc.
+
 from __future__ import annotations
 
 import os

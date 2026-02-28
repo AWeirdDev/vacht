@@ -1,20 +1,61 @@
-fn main() {
-    let platform = v8::new_default_platform(0, false).make_shared();
-    v8::V8::initialize_platform(platform);
-    v8::V8::initialize();
+use std::process;
 
-    let isolate = &mut v8::Isolate::new(Default::default());
+use clap::Parser;
 
-    let scope = std::pin::pin!(v8::HandleScope::new(isolate));
-    let scope = &mut scope.init();
-    let context = v8::Context::new(scope, Default::default());
-    let scope = &mut v8::ContextScope::new(scope, context);
+use crate::job::start_server;
 
-    let code = v8::String::new(scope, "'Hello' + ' World!'").unwrap();
-    println!("javascript code: {}", code.to_rust_string_lossy(scope));
+mod job;
+mod socket;
+mod state;
 
-    let script = v8::Script::compile(scope, code, None).unwrap();
-    let result = script.run(scope).unwrap();
-    let result = result.to_string(scope).unwrap();
-    println!("result: {}", result.to_rust_string_lossy(scope));
+#[derive(clap::Parser)]
+#[command(
+    bin_name = "vacht",
+    version = env!("CARGO_PKG_VERSION"),
+    long_about = "a dead simple python-v8 bridge",
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: CliCommand,
+
+    #[arg(long)]
+    debug: bool,
+}
+
+#[derive(clap::Subcommand)]
+enum CliCommand {
+    /// Gets the name of the local socket depending on the platform.
+    Name,
+
+    /// Runs the instance.
+    Run,
+}
+
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+
+    if cli.debug {
+        tracing_subscriber::fmt::init();
+    }
+
+    match cli.command {
+        CliCommand::Name => {
+            let (name, _) = crate::socket::get_name()?;
+            println!("{}", name);
+        }
+
+        CliCommand::Run => {
+            let rt = tokio::runtime::Runtime::new()?;
+            if let Err(why) = rt.block_on(start_server()) {
+                tracing::error!("an error occurred while running job:\n{why:#?}");
+                eprintln!("error while running job");
+                process::exit(1);
+                // UNREACHABLE
+            }
+
+            process::exit(0); // not mandatory
+        }
+    }
+
+    Ok(())
 }
