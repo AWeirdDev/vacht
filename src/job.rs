@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use interprocess::local_socket::traits::tokio::Listener;
-use v8::Script;
+use v8::{Global, Script};
 
 use crate::{
     socket::{self, LocalSocketStream, PythonEvent},
@@ -61,7 +61,12 @@ pub async fn start_job(stream: &mut LocalSocketStream) -> Result<(), Box<dyn cor
                 let script = ensure!('block, try in (stream, try_catch) => Script::compile(try_catch, source.cast(), None));
                 tracing::info!("finished script");
                 let result = ensure!('block, try in (stream, try_catch) => script.run(try_catch));
-                tracing::info!("got result: {result:?}");
+                let index = {
+                    let inner_state = state.clone();
+                    let mut arena = inner_state.arena.lock().await;
+                    arena.alloc(Global::new(try_catch, result))
+                };
+                stream.send_js_value_id(index).await?;
             }
         }
     }
@@ -70,6 +75,9 @@ pub async fn start_job(stream: &mut LocalSocketStream) -> Result<(), Box<dyn cor
     stream.send_closing().await.ok();
 
     // do cleanup
+    tracing::info!("cleaning up isolate state...");
+    state.close().await;
+
     Ok(())
 }
 

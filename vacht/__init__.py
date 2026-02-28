@@ -1,4 +1,4 @@
 from . import js as js
-from .core import start
+from .isolate import Isolate
 
-__all__ = ["start", "js"]
+__all__ = ["Isolate", "js"]

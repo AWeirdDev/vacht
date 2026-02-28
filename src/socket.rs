@@ -1,5 +1,5 @@
 use interprocess::local_socket::{
-    self, GenericFilePath, GenericNamespaced, ListenerOptions, Name,
+    self, GenericFilePath, ListenerOptions, Name,
     tokio::{Listener, RecvHalf, SendHalf, Stream, prelude::*},
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -20,6 +20,9 @@ pub enum RustEventType {
     /// Javascript exception.
     /// `[str NAME][str MESSAGE][str STACK]`
     JsException = 2,
+
+    /// Value handle.
+    JsValue = 3,
 }
 
 impl RustEventType {
@@ -109,6 +112,14 @@ impl LocalSocketStream {
     }
 
     #[inline(always)]
+    pub async fn send_js_value_id(&mut self, id: usize) -> IoResult<()> {
+        self.tx.write_u8(RustEventType::JsValue as u8).await?;
+        self.tx.write_u64_le(id as u64).await?;
+        self.tx.flush().await?;
+        Ok(())
+    }
+
+    #[inline(always)]
     pub async fn send_js_exception<'s>(
         &mut self,
         scope: &v8::PinScope<'s, '_>,
@@ -182,17 +193,17 @@ impl LocalSocketStream {
 
 #[inline(always)]
 pub fn get_name<'s>() -> anyhow::Result<(&'static str, local_socket::Name<'s>)> {
-    if GenericNamespaced::is_supported() {
-        Ok((
-            "vacht.sock",
-            "vacht.sock".to_ns_name::<GenericNamespaced>()?,
-        ))
-    } else {
-        Ok((
-            "/tmp/vacht.sock",
-            "/tmp/vacht.sock".to_fs_name::<GenericFilePath>()?,
-        ))
-    }
+    // if GenericNamespaced::is_supported() {
+    //     Ok((
+    //         "vacht.sock",
+    //         "vacht.sock".to_ns_name::<GenericNamespaced>()?,
+    //     ))
+    // } else {
+    Ok((
+        "/tmp/vacht.sock",
+        "/tmp/vacht.sock".to_fs_name::<GenericFilePath>()?,
+    ))
+    // }
 }
 
 #[inline(always)]

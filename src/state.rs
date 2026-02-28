@@ -1,13 +1,13 @@
 use std::{ffi::c_void, mem, ptr::NonNull};
 
-use v8::{Global, Isolate};
+use v8::{Global, Isolate, Value};
 
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ObscuredContextScope(NonNull<c_void>);
 
 impl ObscuredContextScope {
-    pub fn new(ctx_scope: &mut v8::ContextScope<'_, '_, v8::HandleScope<'_>>) -> Self {
+    pub const fn new(ctx_scope: &mut v8::ContextScope<'_, '_, v8::HandleScope<'_>>) -> Self {
         let t = Self(unsafe {
             NonNull::new_unchecked(
                 ctx_scope as *mut v8::ContextScope<'_, '_, v8::HandleScope<'_>> as _,
@@ -88,14 +88,99 @@ impl<T> ToString for ObscuredGlobal<T> {
     }
 }
 
+pub struct ValueArena {
+    values: Vec<Option<ObscuredGlobal<Value>>>,
+    vacancies: Vec<usize>,
+}
+
+impl ValueArena {
+    #[inline(always)]
+    pub const fn new() -> Self {
+        Self {
+            values: vec![],
+            vacancies: vec![],
+        }
+    }
+
+    /// Allocate value, returning the index.
+    ///
+    /// # Safety
+    /// The vacancies vector must be truthful.
+    pub fn alloc(&mut self, value: Global<Value>) -> usize {
+        let global = ObscuredGlobal::new(value);
+
+        if let Some(vacancy) = self.vacancies.pop() {
+            let Some(vacant) = self.values.get_mut(vacancy) else {
+                unsafe { core::hint::unreachable_unchecked() }
+            };
+            vacant.replace(global);
+            vacancy
+        } else {
+            let id = self.values.len();
+            self.values.push(Some(global));
+            id
+        }
+    }
+
+    /// Deallocate object of index `index`, if exists.
+    ///
+    /// If the object exists, `true` is returned; `false` otherwise.
+    pub async fn dealloc(
+        &mut self,
+        ctx_scope: &tokio::sync::Mutex<ObscuredContextScope>,
+        index: usize,
+    ) -> bool {
+        if let Some(item) = self.values.get_mut(index) {
+            let Some(glob) = item.take() else {
+                return false;
+            };
+            {
+                let mut holder = ctx_scope.lock().await;
+                let _ = glob.take(holder.get());
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    pub async fn with<R>(
+        &self,
+        ctx_scope: &tokio::sync::Mutex<ObscuredContextScope>,
+        index: usize,
+        callback: impl FnOnce(&Value) -> R,
+    ) -> Option<R> {
+        if let Some(Some(item)) = self.values.get(index) {
+            let mut holder = ctx_scope.lock().await;
+            Some(item.with(holder.get(), callback))
+        } else {
+            None
+        }
+    }
+}
+
 pub struct IsolateState {
     pub ctx_scope: tokio::sync::Mutex<ObscuredContextScope>,
+    pub arena: tokio::sync::Mutex<ValueArena>,
 }
 
 impl IsolateState {
-    pub fn new(ctx_scope: &mut v8::ContextScope<'_, '_, v8::HandleScope<'_>>) -> Self {
+    #[inline(always)]
+    pub const fn new(ctx_scope: &mut v8::ContextScope<'_, '_, v8::HandleScope<'_>>) -> Self {
         Self {
-            ctx_scope: tokio::sync::Mutex::new(ObscuredContextScope::new(ctx_scope)),
+            ctx_scope: tokio::sync::Mutex::const_new(ObscuredContextScope::new(ctx_scope)),
+            arena: tokio::sync::Mutex::const_new(ValueArena::new()),
         }
+    }
+
+    pub async fn close(&self) {
+        let mut arena = self.arena.lock().await;
+        let mut ctx_scope = self.ctx_scope.lock().await;
+        arena.values.drain(..).for_each(|item| {
+            if let Some(global) = item {
+                // drop the global
+                let _ = global.take(ctx_scope.get());
+            }
+        });
     }
 }

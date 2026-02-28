@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import inspect
 from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING, Awaitable, Callable, TypeAlias
 
-from .isolate import Isolate
+if TYPE_CHECKING:
+    from ..isolate import Isolate
+
 
 GLOBAL_ID = 0
 
@@ -35,7 +36,7 @@ else:
 @dataclass(frozen=True)
 class Context:
     action_id: PythonId
-    isolate: Isolate
+    isolate: "Isolate"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,10 +49,20 @@ class Action:
 class Value:
     """Represents a v8 value."""
 
+    isolate: "Isolate"
     id: V8Id
 
     def perform(self) -> ValuePerformance:
         return ValuePerformance(tasks=[])
+
+    async def drop(self):
+        # TODO
+        # await self.isolate.drop(self.id)
+        ...
+
+    @staticmethod
+    def _rust(isolate: "Isolate", id: int) -> Value:
+        return Value(isolate=isolate, id=id)  # pyright: ignore [reportArgumentType]
 
 
 @dataclass(kw_only=True)
