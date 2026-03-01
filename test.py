@@ -5,8 +5,14 @@ from vacht import Isolate
 
 async def main():
     isolate = await Isolate.connect()
-    await isolate.run("'hello world!'")
-    await isolate.run("'hello world2!'")
+    value0 = await isolate.run("'hello world!'")
+    print(value0)
+    await value0.drop()
+
+    value1 = await isolate.run("'hello world 2!'")
+    print(value1)
+    await value1.drop()
+
     await isolate.close()
 
 

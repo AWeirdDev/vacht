@@ -138,6 +138,9 @@ impl ValueArena {
                 let mut holder = ctx_scope.lock().await;
                 let _ = glob.take(holder.get());
             }
+
+            // once we're done, we need to mark it as vacant
+            self.vacancies.push(index);
             true
         } else {
             false

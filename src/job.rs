@@ -68,6 +68,16 @@ pub async fn start_job(stream: &mut LocalSocketStream) -> Result<(), Box<dyn cor
                 };
                 stream.send_js_value_id(index).await?;
             }
+
+            PythonEvent::DropValue(ident) => {
+                tracing::info!("dropping value from arena: {}", ident);
+                let inner_state = state.clone();
+                let mut arena = inner_state.arena.lock().await;
+                // doesn't matter if it doesn't exist
+                if arena.dealloc(&inner_state.ctx_scope, ident).await {
+                    tracing::info!("value dropped");
+                }
+            }
         }
     }
 

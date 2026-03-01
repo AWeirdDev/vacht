@@ -42,6 +42,8 @@ impl RustEventType {
 pub enum PythonEventType {
     CloseIsolate = 0,
     RunScript = 1,
+    DropValue = 2,
+    Orchestrate = 3,
 }
 
 impl PythonEventType {
@@ -50,6 +52,7 @@ impl PythonEventType {
         match x {
             0 => Some(CloseIsolate),
             1 => Some(RunScript),
+            2 => Some(DropValue),
             _ => None,
         }
     }
@@ -59,6 +62,7 @@ impl PythonEventType {
 pub enum PythonEvent {
     Errored(LocalSocketStreamError),
     RunScript(String),
+    DropValue(usize),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -187,6 +191,10 @@ impl LocalSocketStream {
         Ok(match ev {
             PythonEventType::CloseIsolate => None,
             PythonEventType::RunScript => Some(PythonEvent::RunScript(self.read_string().await?)),
+            PythonEventType::DropValue => Some(PythonEvent::DropValue(
+                self.rx.read_u64_le().await? as usize,
+            )),
+            PythonEventType::Orchestrate => todo!(),
         })
     }
 }

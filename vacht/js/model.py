@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import inspect
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Awaitable, Callable, TypeAlias
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, TypeAlias
 
 if TYPE_CHECKING:
     from ..isolate import Isolate
@@ -50,26 +51,76 @@ class Value:
     """Represents a v8 value."""
 
     isolate: "Isolate"
-    id: V8Id
+    """The tied isolate reference."""
 
-    def perform(self) -> ValuePerformance:
-        return ValuePerformance(tasks=[])
+    id: V8Id
+    """The arena entry ID of this value.
+
+    Upon calling `drop()`, the server looks up the the ID of this
+    value and deallocates it.
+    """
+
+    def orchestrate(self) -> ValueOrchestrator:
+        """Orchestrate the data for more efficient Python <-> V8 transformation."""
+        return ValueOrchestrator(value=self, tasks=[])
 
     async def drop(self):
-        # TODO
-        # await self.isolate.drop(self.id)
-        ...
+        """Drops the value.
+
+        It is recommended to call this function to free some memory on the server.
+        """
+        await self.isolate._drop(self.id)
 
     @staticmethod
     def _rust(isolate: "Isolate", id: int) -> Value:
         return Value(isolate=isolate, id=id)  # pyright: ignore [reportArgumentType]
 
 
-@dataclass(kw_only=True)
-class ValuePerformance:
-    tasks: list
+class ManipulationTaskType(Enum):
+    As = 0
+    Index = 1
+    IndexKey = 2
 
-    async def send(self, ctx: Context): ...
+
+class CastTo(Enum):
+    Bool = 0
+    Int = 1
+    Str = 2
+
+
+Manipulation: TypeAlias = (
+    tuple[Literal[ManipulationTaskType.As], CastTo]
+    | tuple[Literal[ManipulationTaskType.Index], int]
+    | tuple[Literal[ManipulationTaskType.IndexKey], str]
+)
+
+
+@dataclass
+class ValueOrchestrator:
+    value: Value
+    tasks: list[Manipulation]
+
+    def as_bool(self) -> ValueOrchestrator:
+        self.tasks.append((ManipulationTaskType.As, CastTo.Bool))
+        return self
+
+    def as_int(self) -> ValueOrchestrator:
+        self.tasks.append((ManipulationTaskType.As, CastTo.Int))
+        return self
+
+    def as_str(self) -> ValueOrchestrator:
+        self.tasks.append((ManipulationTaskType.As, CastTo.Str))
+        return self
+
+    def index(self, key: int | str) -> ValueOrchestrator:
+        if isinstance(key, int):
+            self.tasks.append((ManipulationTaskType.Index, key))
+        else:
+            self.tasks.append((ManipulationTaskType.IndexKey, key))
+        return self
+
+    async def run(self, ctx: Context):
+        self.value.isolate
 
 
 def function(

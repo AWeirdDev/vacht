@@ -18,6 +18,7 @@ struct Cli {
     #[command(subcommand)]
     command: CliCommand,
 
+    /// Enable debug information on all commands.
     #[arg(long)]
     debug: bool,
 }
@@ -28,6 +29,8 @@ enum CliCommand {
     Name,
 
     /// Runs the instance.
+    ///
+    /// Using `vacht --debug run`, it shows debug information.
     Run,
 }
 

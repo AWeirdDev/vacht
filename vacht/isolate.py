@@ -21,6 +21,7 @@ class RustEventType(Enum):
 class PythonEventType(Enum):
     CloseIsolate = 0
     RunScript = 1
+    DropValue = 2
 
 
 # exceptions
@@ -77,6 +78,9 @@ class Serializer:
     def set_u32(self, data: int):
         self.writer.write(struct.pack("<I", data))
 
+    def set_u64(self, data: int):
+        self.writer.write(struct.pack("<Q", data))
+
     def write_string(self, content: str):
         data = content.encode("utf-8")
         self.set_u32(len(data))
@@ -108,6 +112,11 @@ class Isolate:
         self.des = Deserializer(reader)
         self.ser = Serializer(writer)
 
+    @staticmethod
+    async def connect(path: str = SOCKET_PATH) -> Isolate:
+        reader, writer = await asyncio.open_unix_connection(path)
+        return Isolate(reader, writer)
+
     async def run(self, source: str) -> Value:
         """Run Javascript code.
 
@@ -134,12 +143,26 @@ class Isolate:
 
             case RustEventType.JsValue:
                 idx = await self.des.get_u64()
-                return Value._rust(id=idx)
+                return Value._rust(self, id=idx)
 
-    @staticmethod
-    async def connect(path: str = SOCKET_PATH) -> Isolate:
-        reader, writer = await asyncio.open_unix_connection(path)
-        return Isolate(reader, writer)
+    async def _drop(self, idx: int):
+        """Drop value of index `idx`. (internal)
+
+        No errors will be raised even if the value doesn't exist.
+        """
+        self.ser.write_event_type(PythonEventType.DropValue)
+        self.ser.set_u64(idx)
+        await self.ser.commit()
+
+    async def drop(self, value: Value):
+        """Drop a value.
+
+        No errors will be raised even if the value doesn't exist.
+
+        Args:
+            value: The value to drop.
+        """
+        await value.drop()
 
     async def close(self):
         """Close the isolate connection.
@@ -150,3 +173,6 @@ class Isolate:
         self.ser.write_event_type(PythonEventType.CloseIsolate)
         await self.ser.commit()
         await self.ser.close()
+
+    def __repr__(self):
+        return "Isolate()"
