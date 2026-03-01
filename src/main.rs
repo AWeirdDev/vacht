@@ -2,7 +2,7 @@ use std::process;
 
 use clap::Parser;
 
-use crate::job::start_server;
+use crate::job::start_server_at;
 
 mod job;
 mod socket;
@@ -17,39 +17,49 @@ mod state;
 struct Cli {
     #[command(subcommand)]
     command: CliCommand,
-
-    /// Enable debug information on all commands.
-    #[arg(long)]
-    debug: bool,
 }
 
 #[derive(clap::Subcommand)]
 enum CliCommand {
-    /// Gets the name of the local socket depending on the platform.
+    /// Gets the default name of the local socket depending on the platform.
     Name,
 
     /// Runs the instance.
     ///
     /// Using `vacht --debug run`, it shows debug information.
-    Run,
+    Run(RunOptions),
+}
+
+#[derive(clap::Args)]
+struct RunOptions {
+    /// Enable debug information on all commands.
+    #[arg(long)]
+    debug: bool,
+
+    /// Specify a custom socket path name.
+    #[arg(long, required = false)]
+    name: Option<String>,
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    if cli.debug {
-        tracing_subscriber::fmt::init();
-    }
-
     match cli.command {
         CliCommand::Name => {
-            let (name, _) = crate::socket::get_name()?;
+            let (name, _) = crate::socket::get_name(None)?;
             println!("{}", name);
         }
 
-        CliCommand::Run => {
+        CliCommand::Run(run_options) => {
+            if run_options.debug {
+                tracing_subscriber::fmt::init();
+            }
+
             let rt = tokio::runtime::Runtime::new()?;
-            if let Err(why) = rt.block_on(start_server()) {
+
+            let (printname, name) =
+                crate::socket::get_name(run_options.name.as_ref().map(|k| &**k))?;
+            if let Err(why) = rt.block_on(start_server_at(printname, name)) {
                 tracing::error!("an error occurred while running job:\n{why:#?}");
                 eprintln!("error while running job");
                 process::exit(1);

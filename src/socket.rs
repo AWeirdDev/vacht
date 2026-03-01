@@ -4,6 +4,8 @@ use interprocess::local_socket::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+const DEFAULT_SOCK_NAME: &'static str = "./vacht0.sock";
+
 pub type IoResult<T> = Result<T, std::io::Error>;
 
 #[repr(u8)]
@@ -200,7 +202,7 @@ impl LocalSocketStream {
 }
 
 #[inline(always)]
-pub fn get_name<'s>() -> anyhow::Result<(&'static str, local_socket::Name<'s>)> {
+pub fn get_name<'s>(name: Option<&'s str>) -> anyhow::Result<(&'s str, local_socket::Name<'s>)> {
     // if GenericNamespaced::is_supported() {
     //     Ok((
     //         "vacht.sock",
@@ -208,8 +210,9 @@ pub fn get_name<'s>() -> anyhow::Result<(&'static str, local_socket::Name<'s>)> 
     //     ))
     // } else {
     Ok((
-        "/tmp/vacht.sock",
-        "/tmp/vacht.sock".to_fs_name::<GenericFilePath>()?,
+        name.unwrap_or(DEFAULT_SOCK_NAME),
+        name.unwrap_or(DEFAULT_SOCK_NAME)
+            .to_fs_name::<GenericFilePath>()?,
     ))
     // }
 }

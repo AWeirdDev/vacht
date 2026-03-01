@@ -7,7 +7,7 @@ from enum import Enum
 
 from .js import Value
 
-SOCKET_PATH = "/tmp/vacht.sock"
+SOCKET_PATH = "./vacht0.sock"
 
 
 # event types

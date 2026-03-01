@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use interprocess::local_socket::traits::tokio::Listener;
+use interprocess::local_socket::{self, traits::tokio::Listener};
 use v8::{Global, Script};
 
 use crate::{
@@ -91,7 +91,7 @@ pub async fn start_job(stream: &mut LocalSocketStream) -> Result<(), Box<dyn cor
     Ok(())
 }
 
-pub async fn start_server() -> anyhow::Result<()> {
+pub async fn start_server_at(printname: &str, name: local_socket::Name<'_>) -> anyhow::Result<()> {
     {
         tracing::info!("initializing v8");
         let platform = v8::new_default_platform(0, false).make_shared();
@@ -100,7 +100,6 @@ pub async fn start_server() -> anyhow::Result<()> {
         tracing::info!("v8 initialized");
     }
 
-    let (printname, name) = socket::get_name()?;
     let listener = socket::create_listener(name)?;
 
     tracing::info!("server running at {}", printname);
